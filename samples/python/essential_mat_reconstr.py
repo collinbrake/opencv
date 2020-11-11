@@ -121,7 +121,7 @@ if __name__ == '__main__':
     # plot object points
     fig = plt.figure(figsize=(13.0, 11.0))
     ax = fig.add_subplot(111, projection='3d')
-    ax.set_aspect('equal')
+    ax.set_aspect('auto')
     ax.scatter(obj_pts[:,0], obj_pts[:,1], obj_pts[:,2], c='r', marker='o', s=3)
     ax.set_xlabel('x')
     ax.set_ylabel('y')
