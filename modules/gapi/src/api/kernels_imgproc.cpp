@@ -73,6 +73,13 @@ GMat dilate3x3(const GMat& src, int iterations,
     return dilate(src, cv::Mat(), cv::Point(-1,-1), iterations, borderType, borderValue);
 }
 
+GMat morphologyEx(const GMat &src, const MorphTypes op, const Mat &kernel, const Point &anchor,
+                  const int iterations, const BorderTypes borderType, const Scalar &borderValue)
+{
+    return imgproc::GMorphologyEx::on(src, op, kernel, anchor, iterations,
+                                      borderType, borderValue);
+}
+
 GMat Sobel(const GMat& src, int ddepth, int dx, int dy, int ksize,
            double scale, double delta,
            int borderType, const Scalar& bordVal)
@@ -113,6 +120,53 @@ cv::GArray<cv::Point2f> goodFeaturesToTrack(const GMat& image, int maxCorners, d
 {
     return imgproc::GGoodFeatures::on(image, maxCorners, qualityLevel, minDistance, mask, blockSize,
                                       useHarrisDetector, k);
+}
+
+GArray<GArray<Point>>
+findContours(const GMat &src, const RetrievalModes mode, const ContourApproximationModes method,
+             const GOpaque<Point> &offset)
+{
+    return imgproc::GFindContours::on(src, mode, method, offset);
+}
+
+GArray<GArray<Point>>
+findContours(const GMat &src, const RetrievalModes mode, const ContourApproximationModes method)
+{
+    return imgproc::GFindContoursNoOffset::on(src, mode, method);
+}
+
+
+std::tuple<GArray<GArray<Point>>,GArray<Vec4i>>
+findContoursH(const GMat &src, const RetrievalModes mode, const ContourApproximationModes method,
+              const GOpaque<Point> &offset)
+{
+    return imgproc::GFindContoursH::on(src, mode, method, offset);
+}
+
+std::tuple<GArray<GArray<Point>>,GArray<Vec4i>>
+findContoursH(const GMat &src, const RetrievalModes mode, const ContourApproximationModes method)
+{
+    return imgproc::GFindContoursHNoOffset::on(src, mode, method);
+}
+
+GOpaque<Rect> boundingRect(const GMat& src)
+{
+    return imgproc::GBoundingRectMat::on(src);
+}
+
+GOpaque<Rect> boundingRect(const GArray<Point2i>& src)
+{
+    return imgproc::GBoundingRectVector32S::on(src);
+}
+
+GOpaque<Rect> boundingRect(const GArray<Point2f>& src)
+{
+    return imgproc::GBoundingRectVector32F::on(src);
+}
+
+GMat BGR2RGB(const GMat& src)
+{
+    return imgproc::GBGR2RGB::on(src);
 }
 
 GMat RGB2Gray(const GMat& src)
@@ -158,6 +212,26 @@ GMat YUV2BGR(const GMat& src)
 GMat YUV2RGB(const GMat& src)
 {
     return imgproc::GYUV2RGB::on(src);
+}
+
+GMat BGR2I420(const GMat& src)
+{
+    return imgproc::GBGR2I420::on(src);
+}
+
+GMat RGB2I420(const GMat& src)
+{
+    return imgproc::GRGB2I420::on(src);
+}
+
+GMat I4202BGR(const GMat& src)
+{
+    return imgproc::GI4202BGR::on(src);
+}
+
+GMat I4202RGB(const GMat& src)
+{
+    return imgproc::GI4202RGB::on(src);
 }
 
 GMat NV12toRGB(const GMat& src_y, const GMat& src_uv)

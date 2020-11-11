@@ -10,6 +10,7 @@
 #include <iostream>
 #include <tuple>
 #include <type_traits>
+#include <time.h>
 
 #include <opencv2/ts.hpp>
 #include <opencv2/gapi.hpp>
@@ -88,13 +89,25 @@ public:
 
     cv::Scalar sc;
 
+    // integral Scalar initialization
     cv::Scalar initScalarRandU(unsigned upper)
     {
-        auto& rng = cv::theRNG();
-        double s1 = rng(upper);  // FIXIT: RNG result is 'int', not double
+        cv::RNG rng(time(nullptr));
+        double s1 = rng(upper);
         double s2 = rng(upper);
         double s3 = rng(upper);
         double s4 = rng(upper);
+        return cv::Scalar(s1, s2, s3, s4);
+    }
+
+    // floating-point Scalar initialization (cv::core)
+    cv::Scalar initScalarRandU()
+    {
+        cv::RNG rng(time(nullptr));
+        double s1 = exp(rng.uniform(-1, 6) * 3.0 * CV_LOG2) * (rng.uniform(0, 2) ? 1. : -1.);
+        double s2 = exp(rng.uniform(-1, 6) * 3.0 * CV_LOG2) * (rng.uniform(0, 2) ? 1. : -1.);
+        double s3 = exp(rng.uniform(-1, 6) * 3.0 * CV_LOG2) * (rng.uniform(0, 2) ? 1. : -1.);
+        double s4 = exp(rng.uniform(-1, 6) * 3.0 * CV_LOG2) * (rng.uniform(0, 2) ? 1. : -1.);
         return cv::Scalar(s1, s2, s3, s4);
     }
 
@@ -112,7 +125,32 @@ public:
         in_mat1 = cv::Mat(sz_in, type);
         in_mat2 = cv::Mat(sz_in, type);
 
-        sc = initScalarRandU(100);
+        int sdepth = CV_MAT_DEPTH(type);
+        int ddepth = (dtype >= 0) ? CV_MAT_DEPTH(dtype)
+                                  : sdepth;             // dtype == -1 <=> dtype == SAME_TYPE
+
+        if ((sdepth >= CV_32F) || (ddepth >= CV_32F))
+        {
+            sc = initScalarRandU(); // initializing by floating-points
+        }
+        else
+        {
+            switch (sdepth)
+            {
+            case CV_8U:
+                sc = initScalarRandU(UCHAR_MAX + 1U);
+                break;
+            case CV_16U:
+                sc = initScalarRandU(USHRT_MAX + 1U);
+                break;
+            case CV_16S:
+                sc = initScalarRandU(SHRT_MAX + 1U);
+                break;
+            default:
+                sc = initScalarRandU(SCHAR_MAX + 1U);
+                break;
+            }
+        }
 
         // Details: https://github.com/opencv/opencv/pull/16083
         //if (CV_MAT_DEPTH(type) < CV_32F)
@@ -142,7 +180,33 @@ public:
     {
         in_mat1 = cv::Mat(sz_in, type);
 
-        sc = initScalarRandU(100);
+        int sdepth = CV_MAT_DEPTH(type);
+        int ddepth = (dtype >= 0) ? CV_MAT_DEPTH(dtype)
+                                  : sdepth;             // dtype == -1 <=> dtype == SAME_TYPE
+
+        if ((sdepth >= CV_32F) || (ddepth >= CV_32F))
+        {
+            sc = initScalarRandU();
+        }
+        else
+        {
+            switch (sdepth)
+            {
+            case CV_8U:
+                sc = initScalarRandU(UCHAR_MAX + 1U);
+                break;
+            case CV_16U:
+                sc = initScalarRandU(USHRT_MAX + 1U);
+                break;
+            case CV_16S:
+                sc = initScalarRandU(SHRT_MAX + 1U);
+                break;
+            default:
+                sc = initScalarRandU(SCHAR_MAX + 1U);
+                break;
+            }
+        }
+
         if (CV_MAT_DEPTH(type) < CV_32F)
         {
             cv::randu(in_mat1, cv::Scalar::all(0), cv::Scalar::all(255));
@@ -353,6 +417,27 @@ struct TestWithParamsSpecific : public TestWithParamsBase<ParamsSpecific<Specifi
 
 /**
  * @private
+ * @brief Create G-API test fixture with TestWithParams base class and additional base class.
+ * @param Fixture   test fixture name.
+   @param ExtBase   additional base class.
+ * @param InitF     callable that will initialize default available members (from TestFunctional)
+ * @param API       base class API. Specifies types of user-defined parameters. If there are no such
+ *                  parameters, empty angle brackets ("<>") must be specified.
+ * @param Number    number of user-defined parameters (corresponds to the number of types in API).
+ *                  if there are no such parameters, 0 must be specified.
+ * @param ...       list of names of user-defined parameters. if there are no parameters, the list
+ *                  must be empty.
+ */
+#define GAPI_TEST_EXT_BASE_FIXTURE(Fixture, ExtBase, InitF, API, Number, ...) \
+    struct Fixture : public TestWithParams API, public ExtBase { \
+        static_assert(Number == AllParams::specific_params_size, \
+            "Number of user-defined parameters doesn't match size of __VA_ARGS__"); \
+        __WRAP_VAARGS(DEFINE_SPECIFIC_PARAMS_##Number(__VA_ARGS__)) \
+        Fixture() { InitF(type, sz, dtype); } \
+    };
+
+/**
+ * @private
  * @brief Create G-API test fixture with TestWithParamsSpecific base class
  *        This fixture has reduced number of common parameters and no initialization;
  *        it should be used if you don't need common parameters of GAPI_TEST_FIXTURE.
@@ -378,6 +463,7 @@ struct TestWithParamsSpecific : public TestWithParamsBase<ParamsSpecific<Specifi
 
 using compare_f = std::function<bool(const cv::Mat &a, const cv::Mat &b)>;
 using compare_scalar_f = std::function<bool(const cv::Scalar &a, const cv::Scalar &b)>;
+using compare_rect_f = std::function<bool(const cv::Rect &a, const cv::Rect &b)>;
 
 template<typename Elem>
 using compare_vector_f = std::function<bool(const std::vector<Elem> &a,
@@ -404,6 +490,7 @@ private:
 
 using CompareMats = CompareF<cv::Mat, cv::Mat>;
 using CompareScalars = CompareF<cv::Scalar, cv::Scalar>;
+using CompareRects = CompareF<cv::Rect, cv::Rect>;
 
 template<typename Elem>
 using CompareVectors = CompareF<std::vector<Elem>, std::vector<Elem>>;
@@ -447,6 +534,27 @@ struct WrappableScalar
         std::stringstream ss;
         ss << t;
         return CompareScalars(to_compare_f(), ss.str());
+    }
+};
+
+template<typename T>
+struct WrappableRect
+{
+    compare_rect_f to_compare_f()
+    {
+        T t = *static_cast<T*const>(this);
+        return [t](const cv::Rect &a, const cv::Rect &b)
+        {
+            return t(a, b);
+        };
+    }
+
+    CompareRects to_compare_obj()
+    {
+        T t = *static_cast<T*const>(this);
+        std::stringstream ss;
+        ss << t;
+        return CompareRects(to_compare_f(), ss.str());
     }
 };
 
@@ -634,13 +742,15 @@ public:
             double err_Inf = cv::norm(in1, in2, NORM_INF);
             if (err_Inf > _inf_tol)
             {
-                std::cout << "ToleranceColor error: err_Inf=" << err_Inf << "  tolerance=" << _inf_tol << std::endl;;
+                std::cout << "ToleranceColor error: err_Inf=" << err_Inf
+                          << "  tolerance=" << _inf_tol << std::endl;
                 return false;
             }
             double err = cv::norm(in1, in2, NORM_L1 | NORM_RELATIVE);
             if (err > _tol)
             {
-                std::cout << "ToleranceColor error: err=" << err << "  tolerance=" << _tol << std::endl;;
+                std::cout << "ToleranceColor error: err=" << err
+                          << "  tolerance=" << _tol << std::endl;
                 return false;
             }
         }
@@ -664,7 +774,8 @@ public:
         double abs_err = std::abs(in1[0] - in2[0]) / std::max(1.0, std::abs(in2[0]));
         if (abs_err > _tol)
         {
-            std::cout << "AbsToleranceScalar error: abs_err=" << abs_err << "  tolerance=" << _tol << " in1[0]" << in1[0] << " in2[0]" << in2[0] << std::endl;;
+            std::cout << "AbsToleranceScalar error: abs_err=" << abs_err << "  tolerance=" << _tol
+                      << " in1[0]" << in1[0] << " in2[0]" << in2[0] << std::endl;
             return false;
         }
         else
@@ -675,6 +786,46 @@ public:
     friend std::ostream& operator<<(std::ostream& os, const AbsToleranceScalar& obj)
     {
         return os << "AbsToleranceScalar(" << std::to_string(obj._tol) << ")";
+    }
+private:
+    double _tol;
+};
+
+class IoUToleranceRect : public WrappableRect<IoUToleranceRect>
+{
+public:
+    IoUToleranceRect(double tol) : _tol(tol) {}
+    bool operator() (const cv::Rect& in1, const cv::Rect& in2) const
+    {
+        // determine the (x, y)-coordinates of the intersection rectangle
+        int xA = max(in1.x, in2.x);
+        int yA = max(in1.y, in2.y);
+        int xB = min(in1.br().x, in2.br().x);
+        int yB = min(in1.br().y, in2.br().y);
+        // compute the area of intersection rectangle
+        int interArea = max(0, xB - xA) * max(0, yB - yA);
+        // compute the area of union rectangle
+        int unionArea = in1.area() + in2.area() - interArea;
+
+        double iou = interArea / unionArea;
+        double err = 1 - iou;
+        if (err > _tol)
+        {
+            std::cout << "IoUToleranceRect error: err=" << err << "  tolerance=" << _tol
+                      << " in1.x="      << in1.x      << " in2.x="      << in2.x
+                      << " in1.y="      << in1.y      << " in2.y="      << in2.y
+                      << " in1.width="  << in1.width  << " in2.width="  << in2.width
+                      << " in1.height=" << in1.height << " in2.height=" << in2.height << std::endl;
+            return false;
+        }
+        else
+        {
+            return true;
+        }
+    }
+    friend std::ostream& operator<<(std::ostream& os, const IoUToleranceRect& obj)
+    {
+        return os << "IoUToleranceRect(" << std::to_string(obj._tol) << ")";
     }
 private:
     double _tol;
@@ -718,6 +869,11 @@ inline std::ostream& operator<<(std::ostream& os, const opencv_test::compare_sca
     return os << "compare_scalar_f";
 }
 
+inline std::ostream& operator<<(std::ostream& os, const opencv_test::compare_rect_f&)
+{
+    return os << "compare_rect_f";
+}
+
 template<typename Elem>
 inline std::ostream& operator<<(std::ostream& os, const opencv_test::compare_vector_f<Elem>&)
 {
@@ -759,6 +915,56 @@ inline std::ostream& operator<<(std::ostream& os, NormTypes op)
         CASE(NORM_RELATIVE);
         CASE(NORM_MINMAX);
         default: GAPI_Assert(false && "unknown NormTypes value");
+    }
+#undef CASE
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, RetrievalModes op)
+{
+#define CASE(v) case RetrievalModes::v: os << #v; break
+    switch (op)
+    {
+        CASE(RETR_EXTERNAL);
+        CASE(RETR_LIST);
+        CASE(RETR_CCOMP);
+        CASE(RETR_TREE);
+        CASE(RETR_FLOODFILL);
+        default: GAPI_Assert(false && "unknown RetrievalModes value");
+    }
+#undef CASE
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, ContourApproximationModes op)
+{
+#define CASE(v) case ContourApproximationModes::v: os << #v; break
+    switch (op)
+    {
+        CASE(CHAIN_APPROX_NONE);
+        CASE(CHAIN_APPROX_SIMPLE);
+        CASE(CHAIN_APPROX_TC89_L1);
+        CASE(CHAIN_APPROX_TC89_KCOS);
+        default: GAPI_Assert(false && "unknown ContourApproximationModes value");
+    }
+#undef CASE
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, MorphTypes op)
+{
+#define CASE(v) case MorphTypes::v: os << #v; break
+    switch (op)
+    {
+        CASE(MORPH_ERODE);
+        CASE(MORPH_DILATE);
+        CASE(MORPH_OPEN);
+        CASE(MORPH_CLOSE);
+        CASE(MORPH_GRADIENT);
+        CASE(MORPH_TOPHAT);
+        CASE(MORPH_BLACKHAT);
+        CASE(MORPH_HITMISS);
+        default: GAPI_Assert(false && "unknown MorphTypes value");
     }
 #undef CASE
     return os;
